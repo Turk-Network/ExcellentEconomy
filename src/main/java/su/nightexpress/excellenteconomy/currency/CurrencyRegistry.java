@@ -7,6 +7,7 @@ import su.nightexpress.excellenteconomy.api.currency.ExcellentCurrency;
 import su.nightexpress.nightcore.util.LowerCase;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -15,7 +16,7 @@ public class CurrencyRegistry {
     private final Map<String, ExcellentCurrency> currencyByIdMap;
 
     public CurrencyRegistry() {
-        this.currencyByIdMap = new HashMap<>();
+        this.currencyByIdMap = new ConcurrentHashMap<>();
     }
 
     public void clear() {

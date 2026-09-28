@@ -12,6 +12,7 @@ import su.nightexpress.excellenteconomy.config.Perms;
 import su.nightexpress.excellenteconomy.currency.CurrencyManager;
 import su.nightexpress.excellenteconomy.user.CoinsUser;
 import su.nightexpress.excellenteconomy.user.UserManager;
+import su.nightexpress.excellenteconomy.util.PlayerTasks;
 import su.nightexpress.nightcore.commands.Arguments;
 import su.nightexpress.nightcore.commands.command.NightCommand;
 import su.nightexpress.nightcore.core.config.CoreLang;
@@ -44,7 +45,7 @@ public class WalletCommand {
                 userManager.loadByNameAsync(name).thenAccept(opt -> {
                     CoinsUser user = opt.orElse(null);
                     if (user == null) {
-                        CoreLang.ERROR_INVALID_PLAYER.withPrefix(plugin).send(sender);
+                        PlayerTasks.run(plugin, sender, () -> CoreLang.ERROR_INVALID_PLAYER.withPrefix(plugin).send(sender));
                         return;
                     }
 

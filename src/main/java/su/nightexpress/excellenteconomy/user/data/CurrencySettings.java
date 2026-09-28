@@ -5,7 +5,7 @@ import su.nightexpress.excellenteconomy.api.currency.ExcellentCurrency;
 
 public class CurrencySettings {
 
-    private boolean paymentsEnabled;
+    private volatile boolean paymentsEnabled;
 
     public CurrencySettings(boolean paymentsEnabled) {
         this.setPaymentsEnabled(paymentsEnabled);

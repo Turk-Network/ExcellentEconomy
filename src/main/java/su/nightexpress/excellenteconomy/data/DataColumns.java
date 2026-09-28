@@ -9,7 +9,7 @@ import su.nightexpress.excellenteconomy.user.data.CurrencySettings;
 import su.nightexpress.nightcore.db.column.Column;
 import su.nightexpress.nightcore.db.column.ColumnDataReader;
 
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,7 +34,7 @@ public class DataColumns {
         .defaultValue(false)
         .build();
 
-    private static final Map<String, Column<Double>> CURRENCY_MAP = new HashMap<>();
+    private static final Map<String, Column<Double>> CURRENCY_MAP = new ConcurrentHashMap<>();
 
     @Contract(pure = true)
     @NonNull

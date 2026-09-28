@@ -1,9 +1,9 @@
 package su.nightexpress.excellenteconomy.user;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 import org.bukkit.Bukkit;
@@ -19,8 +19,9 @@ public class CoinsUser extends UserTemplate {
     private final UserBalance                   balance;
     private final Map<String, CurrencySettings> settingsMap;
 
-    private long    lastSeen;
-    private boolean hiddenFromTops;
+    private volatile long    lastSeen;
+    private volatile boolean hiddenFromTops;
+    private volatile boolean dirtyState;
 
     public CoinsUser(@NonNull UUID uuid,
                      @NonNull String name,
@@ -30,7 +31,7 @@ public class CoinsUser extends UserTemplate {
                      boolean hiddenFromTops) {
         super(uuid, name);
         this.balance = balance;
-        this.settingsMap = new HashMap<>(settingsMap);
+        this.settingsMap = new ConcurrentHashMap<>(settingsMap);
 
         this.setLastSeen(lastSeen);
         this.setHiddenFromTops(hiddenFromTops);
@@ -49,16 +50,33 @@ public class CoinsUser extends UserTemplate {
      * @param consumer balance function.
      */
     public void editBalance(@NonNull ExcellentCurrency currency, @NonNull Consumer<UserBalance> consumer) {
-        double oldBalance = this.getBalance(currency);
+        synchronized (BalanceTransactions.LOCK) {
+            double oldBalance = this.getBalance(currency);
 
-        consumer.accept(this.balance);
+            consumer.accept(this.balance);
 
-        ChangeBalanceEvent event = new ChangeBalanceEvent(this, currency, oldBalance, this.getBalance(currency));
-        Bukkit.getPluginManager().callEvent(event);
+            ChangeBalanceEvent event = new ChangeBalanceEvent(this, currency, oldBalance, this.getBalance(currency));
+            Bukkit.getPluginManager().callEvent(event);
 
-        if (event.isCancelled()) {
-            this.balance.set(currency, oldBalance);
+            if (event.isCancelled()) {
+                this.balance.set(currency.getId(), oldBalance);
+            }
         }
+    }
+
+    @Override
+    public void markDirty() {
+        this.dirtyState = true;
+    }
+
+    @Override
+    public void markClean() {
+        this.dirtyState = false;
+    }
+
+    @Override
+    public boolean isDirty() {
+        return this.dirtyState;
     }
 
     public void resetBalance(@NonNull Collection<ExcellentCurrency> currencies) {

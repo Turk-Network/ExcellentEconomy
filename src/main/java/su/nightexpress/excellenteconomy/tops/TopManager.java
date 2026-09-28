@@ -32,14 +32,18 @@ import su.nightexpress.excellenteconomy.currency.CurrencyRegistry;
 import su.nightexpress.excellenteconomy.tops.command.TopCommand;
 import su.nightexpress.excellenteconomy.tops.listener.TopListener;
 import su.nightexpress.excellenteconomy.tops.menu.TopMenu;
+import su.nightexpress.excellenteconomy.tops.menu.FoliaTopMenu;
+import su.nightexpress.excellenteconomy.tops.menu.FoliaMenuRegistry;
 import su.nightexpress.excellenteconomy.tops.placeholder.ServerBalancePlaceholders;
 import su.nightexpress.excellenteconomy.tops.placeholder.TopBalancePlaceholders;
 import su.nightexpress.excellenteconomy.user.CoinsUser;
 import su.nightexpress.excellenteconomy.user.UserManager;
+import su.nightexpress.excellenteconomy.util.PlayerTasks;
 import su.nightexpress.nightcore.manager.AbstractManager;
 import su.nightexpress.nightcore.util.Lists;
 import su.nightexpress.nightcore.util.LowerCase;
 import su.nightexpress.nightcore.util.NumberUtil;
+import su.nightexpress.nightcore.util.Version;
 import su.nightexpress.nightcore.util.placeholder.CommonPlaceholders;
 import su.nightexpress.nightcore.util.placeholder.PlaceholderContext;
 
@@ -52,6 +56,7 @@ public class TopManager extends AbstractManager<EconomyPlugin> {
     private final Map<String, Map<String, TopEntry>> topEntries;
 
     private TopMenu topMenu;
+    private FoliaMenuRegistry foliaMenuRegistry;
 
     public TopManager(@NonNull EconomyPlugin plugin, @NonNull CurrencyRegistry currencyRegistry,
                       @NonNull CommandManager commandManager, @NonNull UserManager userManager) {
@@ -69,7 +74,14 @@ public class TopManager extends AbstractManager<EconomyPlugin> {
         if (Config.TOPS_USE_GUI.get()) {
             Path path = this.plugin.dataPath().resolve(EconomyFiles.DIR_MENU).resolve(TopFiles.FILE_LEADERBOARD);
 
-            this.topMenu = this.initMenu(new TopMenu(this.plugin, this), path);
+            if (Version.isFolia()) {
+                this.foliaMenuRegistry = new FoliaMenuRegistry(this.plugin);
+                this.foliaMenuRegistry.setup();
+                this.topMenu = this.initMenu(new FoliaTopMenu(this.plugin, this, this.foliaMenuRegistry), path);
+            }
+            else {
+                this.topMenu = this.initMenu(new TopMenu(this.plugin, this), path);
+            }
         }
 
         this.loadCommands();
@@ -83,6 +95,7 @@ public class TopManager extends AbstractManager<EconomyPlugin> {
 
     @Override
     protected void onShutdown() {
+        if (this.foliaMenuRegistry != null) this.foliaMenuRegistry.shutdown();
         this.topEntries.clear();
     }
 
@@ -100,7 +113,8 @@ public class TopManager extends AbstractManager<EconomyPlugin> {
         Set<CoinsUser> users = this.userManager.getAll();
 
         users.removeIf(user -> {
-            user.player().ifPresent(this::hideOrShowInTops);
+            user.player().ifPresent(player -> PlayerTasks.run(this.plugin, player,
+                () -> this.hideOrShowInTops(player)));
             return user.isHiddenFromTops();
         });
 

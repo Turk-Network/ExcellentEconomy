@@ -29,7 +29,7 @@ public class CurrencyLogger {
     private final boolean logToFile;
 
     private BufferedWriter writer;
-    private boolean        running;
+    private volatile boolean running;
 
     public CurrencyLogger(@NotNull EconomyPlugin plugin,
                           @NotNull DateTimeFormatter formatter,
@@ -52,7 +52,7 @@ public class CurrencyLogger {
     private record LogEntry(@NotNull String log, long timestamp) {
     }
 
-    public void shutdown() {
+    public synchronized void shutdown() {
         this.running = false;
         this.queue.clear();
 
@@ -77,7 +77,7 @@ public class CurrencyLogger {
         }
     }
 
-    public void write() {
+    public synchronized void write() {
         try {
             while (this.running && !this.queue.isEmpty()) {
                 LogEntry result = this.queue.poll(500, TimeUnit.MILLISECONDS);

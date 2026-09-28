@@ -11,6 +11,11 @@ import org.jspecify.annotations.Nullable;
 import su.nightexpress.excellenteconomy.api.currency.ExcellentCurrency;
 import su.nightexpress.excellenteconomy.user.CoinsUser;
 
+/**
+ * Fired on the calling thread. On Folia, a synchronous event may originate from
+ * a region other than the balance holder's region. Listeners must use the holder's
+ * entity scheduler before accessing player or world state.
+ */
 public final class ChangeBalanceEvent extends Event implements Cancellable {
 
     private static final HandlerList HANDLER_LIST = new HandlerList();

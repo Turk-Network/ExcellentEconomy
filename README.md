@@ -51,19 +51,24 @@ The following versions and platforms are supported:
 
 | **Server Version**  | **Paper** | **Spigot** | **Folia** | **Java Version**
 | :---: | :---: | :---: | :--: | :---: |
-| 26.2 | ✔️ | ✔️ | ❌ | 25 |
-| 26.1.2 | ✔️ | ✔️ | ❌ | 25 |
-| 26.1.1 | ✔️ | ✔️ | ❌ | 25 |
-| 1.21.11 | ✔️ | ✔️ | ❌ | 25 |
-| 1.21.10 | ✔️ | ✔️ | ❌ | 25 |
-| 1.21.9 | ✔️ | ✔️ | ❌ | 25 |
-| 1.21.8 | ✔️ | ✔️ | ❌ | 25 |
+| 26.3 | ✔️ | ✔️ | ✔️ | 25 |
+| 26.2 | ✔️ | ✔️ | ✔️ | 25 |
+| 26.1.2 | ✔️ | ✔️ | ✔️ | 25 |
+| 26.1.1 | ✔️ | ✔️ | ✔️ | 25 |
+| 1.21.11 | ✔️ | ✔️ | ✔️ | 25 |
+| 1.21.10 | ✔️ | ✔️ | ✔️ | 25 |
+| 1.21.9 | ✔️ | ✔️ | ✔️ | 25 |
+| 1.21.8 | ✔️ | ✔️ | ✔️ | 25 |
 
 - Anything not listed in the compatibility table is **NOT** supported.
 - Make sure to check out all known issues and incompatibilities [here](https://nightexpressdev.com/excellenteconomy/faq/).
 
 **Dependencies:**
-- [NightCore](https://nightexpressdev.com/nightcore/) - Framework **required** for the plugin to run.
+- [NightCore 2.16.6 or newer](https://modrinth.com/plugin/nightcore) - Framework **required** for 26.x version detection and Folia scheduling. Update NightCore together with ExcellentEconomy.
+
+On Folia, player notifications, sounds, leaderboard menus, clicks, and refreshes run on the player's entity scheduler. Balance changes, payments, and exchanges are serialized across region and async threads. Optional integrations must also support your server platform. `ChangeBalanceEvent` listeners must schedule any player/world access on the owning region; the event can be fired by another player's region or an async API call.
+
+Build with Java 25 using `./gradlew build` (`gradlew.bat build` on Windows). The build includes concurrent payment, event cancellation, and player scheduler regression tests. The compatibility table describes the supported targets; a successful build does not replace a live server integration test.
 
 **Optional Plugins:**
 - [PlaceholderAPI](https://spigotmc.org/resources/6245/) - For global placeholders to use in other plugins.

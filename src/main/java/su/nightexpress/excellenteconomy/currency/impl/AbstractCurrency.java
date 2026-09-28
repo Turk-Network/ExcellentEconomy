@@ -6,6 +6,8 @@ import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 
 import su.nightexpress.excellenteconomy.EconomyPlaceholders;
+import su.nightexpress.excellenteconomy.EconomyPlugin;
+import su.nightexpress.excellenteconomy.util.PlayerTasks;
 import su.nightexpress.excellenteconomy.api.currency.ExcellentCurrency;
 import su.nightexpress.excellenteconomy.config.Config;
 import su.nightexpress.excellenteconomy.config.Perms;
@@ -32,11 +34,11 @@ import java.util.function.Function;
 
 public abstract class AbstractCurrency implements ExcellentCurrency, ConfigBacked {
 
-    private static final DecimalFormat RAW_FORMAT = new DecimalFormat("#");
-
-    static {
-        RAW_FORMAT.setMaximumFractionDigits(8);
-    }
+    private static final ThreadLocal<DecimalFormat> RAW_FORMAT = ThreadLocal.withInitial(() -> {
+        DecimalFormat formatter = new DecimalFormat("#");
+        formatter.setMaximumFractionDigits(8);
+        return formatter;
+    });
 
     protected final Path                path;
     protected final String              id;
@@ -248,19 +250,22 @@ public abstract class AbstractCurrency implements ExcellentCurrency, ConfigBacke
 
     @Override
     public void sendPrefixed(@NonNull MessageLocale locale, @NonNull CommandSender sender) {
-        this.getPrefixed(locale).sendWith(sender, builder -> builder.with(this.placeholders()));
+        PlayerTasks.run(EconomyPlugin.getPlugin(EconomyPlugin.class), sender,
+            () -> this.getPrefixed(locale).sendWith(sender, builder -> builder.with(this.placeholders())));
     }
 
     @Override
     public void sendPrefixed(@NonNull MessageLocale locale, @NonNull CommandSender sender,
                              @NonNull Consumer<PlaceholderContext.Builder> consumer) {
-        this.getPrefixed(locale).sendWith(sender, builder -> consumer.accept(builder.with(this.placeholders())));
+        PlayerTasks.run(EconomyPlugin.getPlugin(EconomyPlugin.class), sender,
+            () -> this.getPrefixed(locale).sendWith(sender, builder -> consumer.accept(builder.with(this.placeholders()))));
     }
 
     @Override
     public void sendPrefixed(@NonNull MessageLocale locale, @NonNull CommandSender sender,
                              @NonNull PlaceholderContext context) {
-        this.getPrefixed(locale).sendWith(sender, context);
+        PlayerTasks.run(EconomyPlugin.getPlugin(EconomyPlugin.class), sender,
+            () -> this.getPrefixed(locale).sendWith(sender, context));
     }
 
     private LangMessage getPrefixed(@NonNull MessageLocale locale) {
@@ -346,7 +351,7 @@ public abstract class AbstractCurrency implements ExcellentCurrency, ConfigBacke
     @Override
     @NonNull
     public String formatRaw(double balance) {
-        return RAW_FORMAT.format(this.floorIfNeeded(balance));
+        return RAW_FORMAT.get().format(this.floorIfNeeded(balance));
     }
 
     @NonNull

@@ -17,11 +17,13 @@ import su.nightexpress.excellenteconomy.migration.command.MigrationCommand;
 import su.nightexpress.excellenteconomy.migration.impl.PlayerPointsMigrator;
 import su.nightexpress.excellenteconomy.user.CoinsUser;
 import su.nightexpress.excellenteconomy.user.UserManager;
+import su.nightexpress.excellenteconomy.util.PlayerTasks;
 import su.nightexpress.nightcore.manager.SimpleManager;
 import su.nightexpress.nightcore.util.LowerCase;
 import su.nightexpress.nightcore.util.Plugins;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 public class MigrationManager extends SimpleManager<EconomyPlugin> {
@@ -43,7 +45,7 @@ public class MigrationManager extends SimpleManager<EconomyPlugin> {
         this.commandManager = commandManager;
         this.currencyRegistry = currencyRegistry;
         this.currencyManager = currencyManager;
-        this.migrators = new HashMap<>();
+        this.migrators = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -98,14 +100,22 @@ public class MigrationManager extends SimpleManager<EconomyPlugin> {
             return false;
         }
 
+        if (!this.currencyManager.tryDisableOperations()) {
+            Lang.MIGRATION_START_BLOCKED.message().send(sender);
+            return false;
+        }
+
         this.plugin.runTaskAsync(() -> {
-            this.currencyManager.disableOperations();
-            Lang.MIGRATION_STARTED.message().sendWith(sender, builder -> builder.with(EconomyPlaceholders.GENERIC_NAME,
-                migrator::getName));
-            this.migrate(migrator, currency);
-            Lang.MIGRATION_COMPLETED.message().sendWith(sender, builder -> builder.with(
-                EconomyPlaceholders.GENERIC_NAME, migrator::getName));
-            this.currencyManager.allowOperations();
+            try {
+                PlayerTasks.run(this.plugin, sender, () -> Lang.MIGRATION_STARTED.message().sendWith(sender,
+                    builder -> builder.with(EconomyPlaceholders.GENERIC_NAME, migrator::getName)));
+                this.migrate(migrator, currency);
+                PlayerTasks.run(this.plugin, sender, () -> Lang.MIGRATION_COMPLETED.message().sendWith(sender,
+                    builder -> builder.with(EconomyPlaceholders.GENERIC_NAME, migrator::getName)));
+            }
+            finally {
+                this.currencyManager.allowOperations();
+            }
         });
 
         return true;

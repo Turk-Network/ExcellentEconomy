@@ -32,7 +32,7 @@ public class DataHandler extends AbstractDatabaseManager<EconomyPlugin> implemen
 
     private final Table usersTable;
 
-    private boolean synchronizationActive; // A little helper to pause synchronization during operations disable
+    private volatile boolean synchronizationActive; // A little helper to pause synchronization during operations disable
 
     public DataHandler(@NonNull EconomyPlugin plugin) {
         super(plugin);
