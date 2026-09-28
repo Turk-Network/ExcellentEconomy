@@ -147,7 +147,10 @@ class BalanceConcurrencyTest {
 
     private CurrencyManager manager(Player sender, CoinsUser source) {
         UserManager users = mock(UserManager.class);
-        when(users.getOrFetch(sender)).thenReturn(source);
+        when(users.getOrFetch(sender)).thenAnswer(call -> {
+            assertFalse(Thread.holdsLock(BalanceTransactions.LOCK), "User fetch must not hold the balance monitor");
+            return source;
+        });
         return new CurrencyManager(mock(EconomyPlugin.class), new CurrencyRegistry(), mock(CommandManager.class),
             mock(DataHandler.class), users);
     }
@@ -211,5 +214,62 @@ class BalanceConcurrencyTest {
         assertFalse(manager.canPerformOperations());
         manager.allowOperations();
         assertTrue(manager.tryDisableOperations());
+    }
+
+    @Test
+    void recipientBonusDoesNotRefundAnAcceptedPayment() {
+        CoinsUser source = user(100);
+        CoinsUser target = user(0);
+        Player sender = mock(Player.class);
+        when(sender.getUniqueId()).thenReturn(source.getId());
+        doAnswer(call -> {
+            ChangeBalanceEvent event = call.getArgument(0);
+            if (event.getUser() == target) target.getBalance().add(currency, 1);
+            return null;
+        }).when(events).callEvent(any(ChangeBalanceEvent.class));
+
+        assertTrue(manager(sender, source).send(sender, target, currency, 25));
+        assertEquals(75D, source.getBalance(currency));
+        assertEquals(26D, target.getBalance(currency));
+    }
+
+    @Test
+    void acceptedDebitAdjustmentSurvivesACancelledRecipientDeposit() {
+        CoinsUser source = user(100);
+        CoinsUser target = user(0);
+        Player sender = mock(Player.class);
+        when(sender.getUniqueId()).thenReturn(source.getId());
+        doAnswer(call -> {
+            ChangeBalanceEvent event = call.getArgument(0);
+            if (event.getUser() == source) source.getBalance().add(currency, 1);
+            else event.setCancelled(true);
+            return null;
+        }).when(events).callEvent(any(ChangeBalanceEvent.class));
+
+        assertFalse(manager(sender, source).send(sender, target, currency, 25));
+        assertEquals(101D, source.getBalance(currency));
+        assertEquals(0D, target.getBalance(currency));
+    }
+
+    @Test
+    void exchangeBonusDoesNotRefundAnAcceptedExchange() {
+        CoinsUser source = user(100);
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(source.getId());
+        when(currency.isExchangeAllowed()).thenReturn(true);
+        ExcellentCurrency target = mock(ExcellentCurrency.class);
+        when(target.getId()).thenReturn("tokens");
+        when(target.isUnderLimit(anyDouble())).thenReturn(true);
+        when(currency.canExchangeTo(target)).thenReturn(true);
+        when(currency.getExchangeResult(eq(target), anyDouble())).thenReturn(50D);
+        doAnswer(call -> {
+            ChangeBalanceEvent event = call.getArgument(0);
+            if (event.getCurrency() == target) source.getBalance().add(target, 1);
+            return null;
+        }).when(events).callEvent(any(ChangeBalanceEvent.class));
+
+        assertTrue(manager(player, source).exchange(player, currency, target, 25));
+        assertEquals(75D, source.getBalance(currency));
+        assertEquals(51D, source.getBalance(target));
     }
 }

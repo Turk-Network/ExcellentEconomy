@@ -50,6 +50,11 @@ public class CoinsUser extends UserTemplate {
      * @param consumer balance function.
      */
     public void editBalance(@NonNull ExcellentCurrency currency, @NonNull Consumer<UserBalance> consumer) {
+        this.tryEditBalance(currency, consumer);
+    }
+
+    /** Returns whether the balance event was accepted, independently of listener adjustments. */
+    public boolean tryEditBalance(@NonNull ExcellentCurrency currency, @NonNull Consumer<UserBalance> consumer) {
         synchronized (BalanceTransactions.LOCK) {
             double oldBalance = this.getBalance(currency);
 
@@ -60,7 +65,9 @@ public class CoinsUser extends UserTemplate {
 
             if (event.isCancelled()) {
                 this.balance.set(currency.getId(), oldBalance);
+                return false;
             }
+            return true;
         }
     }
 

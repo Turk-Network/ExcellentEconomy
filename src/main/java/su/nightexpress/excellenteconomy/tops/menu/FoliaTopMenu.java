@@ -3,6 +3,7 @@ package su.nightexpress.excellenteconomy.tops.menu;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.inventory.InventoryView;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import su.nightexpress.excellenteconomy.EconomyPlugin;
@@ -36,10 +37,14 @@ public class FoliaTopMenu extends TopMenu {
     @Override
     public boolean show(@NonNull Player player, @NonNull ExcellentCurrency currency,
                         @Nullable Consumer<MenuViewer> preRender) {
-        PlayerTasks.run(this.owner, player, () -> this.showMenu(this.registry, player, viewer -> {
-            viewer.setCurrentObject(currency);
-            if (preRender != null) preRender.accept(viewer);
-        }));
+        if (this.registry.isShuttingDown()) return false;
+        PlayerTasks.run(this.owner, player, () -> {
+            if (this.registry.isShuttingDown()) return;
+            this.showMenu(this.registry, player, viewer -> {
+                viewer.setCurrentObject(currency);
+                if (preRender != null) preRender.accept(viewer);
+            });
+        });
         return true;
     }
 
@@ -107,14 +112,26 @@ public class FoliaTopMenu extends TopMenu {
     public void close(@NonNull UUID id) {
         MenuViewer viewer = this.getViewer(id);
         if (viewer == null) return;
+        InventoryView closingView = viewer.getCurrentView();
         // NightCore remains enabled during a child plugin's disable/reload.
         NightCore core = NightCore.get();
         if (!core.isEnabled()) return;
-        core.runTask(viewer.getPlayer(), () -> {
-            if (this.regionViewers.remove(id, viewer)) {
-                this.registry.unregisterViewer(viewer.getPlayer());
-                viewer.closeMenu();
+        var task = core.scheduler().runTask(viewer.getPlayer(), () -> {
+            try {
+                if (this.regionViewers.remove(id, viewer)) {
+                    this.registry.unregisterViewer(viewer.getPlayer());
+                    // Do not close an inventory opened after this close was requested.
+                    if (viewer.getPlayer().getOpenInventory() == closingView) viewer.closeMenu();
+                }
+            }
+            finally {
+                this.registry.completeClose(id, closingView);
             }
         });
+        if (task == null) {
+            this.regionViewers.remove(id, viewer);
+            this.registry.unregisterViewer(viewer.getPlayer());
+            this.registry.completeClose(id, closingView);
+        }
     }
 }

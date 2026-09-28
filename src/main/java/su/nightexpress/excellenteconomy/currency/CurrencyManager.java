@@ -706,12 +706,13 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
 
     public boolean send(@NonNull Player sender, @NonNull CoinsUser targetUser, @NonNull ExcellentCurrency currency,
                         double rawAmount) {
+        CoinsUser fromUser = this.userManager.getOrFetch(sender);
         synchronized (BalanceTransactions.LOCK) {
-            return this.sendLocked(sender, targetUser, currency, rawAmount);
+            return this.sendLocked(sender, fromUser, targetUser, currency, rawAmount);
         }
     }
 
-    private boolean sendLocked(@NonNull Player sender, @NonNull CoinsUser targetUser,
+    private boolean sendLocked(@NonNull Player sender, @NonNull CoinsUser fromUser, @NonNull CoinsUser targetUser,
                                @NonNull ExcellentCurrency currency, double rawAmount) {
         OperationContext context = OperationContext.of(sender);
 
@@ -733,7 +734,6 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
             return false;
         }
 
-        CoinsUser fromUser = this.userManager.getOrFetch(sender);
         if (amount > fromUser.getBalance(currency)) {
             currency.sendPrefixed(Lang.CURRENCY_SEND_ERROR_NOT_ENOUGH, sender);
             return false;
@@ -747,14 +747,12 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
             return false;
         }
 
-        double oldSenderBalance = fromUser.getBalance(currency);
-        double oldTargetBalance = targetUser.getBalance(currency);
-        fromUser.removeBalance(currency, amount);
-        if (fromUser.getBalance(currency) != oldSenderBalance - amount) return false;
+        if (!fromUser.tryEditBalance(currency, balance -> balance.remove(currency, amount))) return false;
 
-        targetUser.addBalance(currency, amount);
-        if (targetUser.getBalance(currency) != oldTargetBalance + amount) {
-            fromUser.getBalance().set(currency.getId(), oldSenderBalance);
+        if (!targetUser.tryEditBalance(currency, balance -> balance.add(currency, amount))) {
+            // Undo only this payment's debit; accepted listener adjustments remain intact.
+            fromUser.getBalance().add(currency, amount);
+            fromUser.markDirty();
             return false;
         }
         targetUser.markDirty();
@@ -795,12 +793,13 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
 
     public boolean exchange(@NonNull Player player, @NonNull ExcellentCurrency sourceCurrency,
                             @NonNull ExcellentCurrency targetCurrency, double initAmount) {
+        CoinsUser user = this.userManager.getOrFetch(player);
         synchronized (BalanceTransactions.LOCK) {
-            return this.exchangeLocked(player, sourceCurrency, targetCurrency, initAmount);
+            return this.exchangeLocked(player, user, sourceCurrency, targetCurrency, initAmount);
         }
     }
 
-    private boolean exchangeLocked(@NonNull Player player, @NonNull ExcellentCurrency sourceCurrency,
+    private boolean exchangeLocked(@NonNull Player player, @NonNull CoinsUser user, @NonNull ExcellentCurrency sourceCurrency,
                                    @NonNull ExcellentCurrency targetCurrency, double initAmount) {
         OperationContext context = OperationContext.of(player);
 
@@ -817,7 +816,6 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
             return false;
         }
 
-        CoinsUser user = this.userManager.getOrFetch(player);
         if (user.getBalance(sourceCurrency) < amount) {
             sourceCurrency.sendPrefixed(Lang.CURRENCY_EXCHANGE_ERROR_LOW_BALANCE, player, builder -> builder
                 .with(EconomyPlaceholders.GENERIC_AMOUNT, () -> sourceCurrency.format(amount))
@@ -847,14 +845,11 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
             return false;
         }
 
-        double oldSourceBalance = user.getBalance(sourceCurrency);
-        double oldTargetBalance = user.getBalance(targetCurrency);
-        user.removeBalance(sourceCurrency, amount);
-        if (user.getBalance(sourceCurrency) != oldSourceBalance - amount) return false;
+        if (!user.tryEditBalance(sourceCurrency, balance -> balance.remove(sourceCurrency, amount))) return false;
 
-        user.addBalance(targetCurrency, result);
-        if (user.getBalance(targetCurrency) != oldTargetBalance + result) {
-            user.getBalance().set(sourceCurrency.getId(), oldSourceBalance);
+        if (!user.tryEditBalance(targetCurrency, balance -> balance.add(targetCurrency, result))) {
+            user.getBalance().add(sourceCurrency, amount);
+            user.markDirty();
             return false;
         }
         user.markDirty();

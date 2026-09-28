@@ -7,6 +7,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.inventory.InventoryView;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import su.nightexpress.excellenteconomy.EconomyPlugin;
@@ -16,6 +17,7 @@ import su.nightexpress.nightcore.ui.inventory.Menu;
 import su.nightexpress.nightcore.ui.inventory.MenuRegistry;
 
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +28,8 @@ public class FoliaMenuRegistry extends MenuRegistry implements Listener {
     private final EconomyPlugin owner;
     private final Map<UUID, Menu> menus = new ConcurrentHashMap<>();
     private AdaptedTask ticker;
+    private volatile boolean shuttingDown;
+    private PendingMenuCloses pendingCloses;
 
     public FoliaMenuRegistry(@NonNull EconomyPlugin owner) {
         super(NightCore.get());
@@ -40,10 +44,26 @@ public class FoliaMenuRegistry extends MenuRegistry implements Listener {
 
     @Override
     protected void onShutdown() {
+        this.shuttingDown = true;
         if (this.ticker != null) this.ticker.cancel();
+        Map<UUID, InventoryView> closingViews = new HashMap<>();
+        this.getActiveMenus().forEach(menu -> menu.getViewers().forEach(viewer -> {
+            InventoryView view = viewer.getCurrentView();
+            if (view != null) closingViews.put(viewer.getPlayer().getUniqueId(), view);
+        }));
+        // Host this guard on NightCore, which also owns the deferred close tasks.
+        this.pendingCloses = new PendingMenuCloses(NightCore.get(), closingViews);
         HandlerList.unregisterAll(this);
         this.getActiveMenus().forEach(Menu::close);
         this.menus.clear();
+    }
+
+    boolean isShuttingDown() {
+        return this.shuttingDown;
+    }
+
+    void completeClose(UUID id, @Nullable InventoryView view) {
+        if (view != null && this.pendingCloses != null) this.pendingCloses.complete(id, view);
     }
 
     @Override
@@ -72,14 +92,20 @@ public class FoliaMenuRegistry extends MenuRegistry implements Listener {
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         Menu menu = this.getActiveMenu(player);
-        if (menu != null) menu.handleClick(player, event);
+        if (menu != null) {
+            if (this.shuttingDown) event.setCancelled(true);
+            else menu.handleClick(player, event);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         Menu menu = this.getActiveMenu(player);
-        if (menu != null) menu.handleDrag(player, event);
+        if (menu != null) {
+            if (this.shuttingDown) event.setCancelled(true);
+            else menu.handleDrag(player, event);
+        }
     }
 
     @EventHandler

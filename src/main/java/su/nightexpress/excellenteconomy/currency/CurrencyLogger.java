@@ -52,16 +52,18 @@ public class CurrencyLogger {
     private record LogEntry(@NotNull String log, long timestamp) {
     }
 
-    public synchronized void shutdown() {
+    public void shutdown() {
         this.running = false;
         this.queue.clear();
 
-        if (this.writer != null) {
-            try {
-                this.writer.close();
-            }
-            catch (IOException exception) {
-                exception.printStackTrace();
+        synchronized (this) {
+            if (this.writer != null) {
+                try {
+                    this.writer.close();
+                }
+                catch (IOException exception) {
+                    exception.printStackTrace();
+                }
             }
         }
     }
@@ -72,7 +74,7 @@ public class CurrencyLogger {
         if (this.logToConsole && context.shouldNotify(NotificationTarget.CONSOLE_LOGGER)) {
             this.plugin.info(stripped);
         }
-        if (this.logToFile && context.shouldNotify(NotificationTarget.FILE_LOGGER)) {
+        if (this.running && this.logToFile && context.shouldNotify(NotificationTarget.FILE_LOGGER)) {
             this.queue.add(new LogEntry(stripped, System.currentTimeMillis()));
         }
     }
