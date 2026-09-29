@@ -10,6 +10,7 @@ import su.nightexpress.excellenteconomy.config.Perms;
 import su.nightexpress.excellenteconomy.currency.CurrencyManager;
 import su.nightexpress.excellenteconomy.user.CoinsUser;
 import su.nightexpress.excellenteconomy.user.UserManager;
+import su.nightexpress.excellenteconomy.util.PlayerTasks;
 import su.nightexpress.nightcore.commands.Arguments;
 import su.nightexpress.nightcore.commands.builder.LiteralNodeBuilder;
 import su.nightexpress.nightcore.commands.context.CommandContext;
@@ -57,7 +58,9 @@ public class PayCommand implements CurrencyCommand {
                 return;
             }
 
-            this.manager.send(sender, targetUser, currency, amount);
+            // The lookup completes off-thread; pay on the sender's thread so their placeholders stay region-safe.
+            PlayerTasks.run(this.manager.plugin(), sender,
+                () -> this.manager.send(sender, targetUser, currency, amount));
         });
         return true;
     }
