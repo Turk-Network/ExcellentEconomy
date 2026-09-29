@@ -53,8 +53,10 @@ tasks {
     processResources {
         // Replicates maven <filtering>true</filtering> for plugin.yml
         // Replaces ${version} with the project version.
+        val pluginVersion = project.version.toString()
+        inputs.property("version", pluginVersion)
         filesMatching("*plugin.yml") {
-            expand(mapOf("version" to project.version))
+            expand(mapOf("version" to pluginVersion))
         }
     }
 }
