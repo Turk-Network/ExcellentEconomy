@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,8 +109,6 @@ public class TopManager extends AbstractManager<EconomyPlugin> {
     }
 
     public void updateBalances() {
-        this.topEntries.clear();
-
         Set<CoinsUser> users = this.userManager.getAll();
 
         users.removeIf(user -> {
@@ -117,6 +116,9 @@ public class TopManager extends AbstractManager<EconomyPlugin> {
                 () -> this.hideOrShowInTops(player)));
             return user.isHiddenFromTops();
         });
+
+        // Build the new leaderboards first, so region threads never read a cleared or partially filled snapshot.
+        Map<String, Map<String, TopEntry>> updated = new HashMap<>();
 
         this.currencyRegistry.getCurrencies().forEach(currency -> {
             AtomicInteger counter = new AtomicInteger(0);
@@ -128,8 +130,11 @@ public class TopManager extends AbstractManager<EconomyPlugin> {
                         .getName(), user.getId(), user.getBalance(currency)));
                 });
 
-            this.topEntries.put(currency.getId(), entries);
+            updated.put(currency.getId(), entries);
         });
+
+        this.topEntries.putAll(updated);
+        this.topEntries.keySet().retainAll(updated.keySet());
     }
 
     public void handleJoin(@NonNull PlayerJoinEvent event) {
