@@ -53,18 +53,32 @@ public class CurrencyLogger {
     }
 
     public void shutdown() {
+        // Stop the periodic writer first, so waiting for its monitor never blocks on a long queue.
         this.running = false;
-        this.queue.clear();
 
         synchronized (this) {
             if (this.writer != null) {
                 try {
-                    this.writer.close();
+                    // Persist operations queued since the last write interval instead of dropping them.
+                    LogEntry entry;
+                    while ((entry = this.queue.poll()) != null) {
+                        this.append(entry);
+                    }
+                    this.writer.flush();
                 }
                 catch (IOException exception) {
                     exception.printStackTrace();
                 }
+                finally {
+                    try {
+                        this.writer.close();
+                    }
+                    catch (IOException exception) {
+                        exception.printStackTrace();
+                    }
+                }
             }
+            this.queue.clear();
         }
     }
 
@@ -84,9 +98,7 @@ public class CurrencyLogger {
             while (this.running && !this.queue.isEmpty()) {
                 LogEntry result = this.queue.poll(500, TimeUnit.MILLISECONDS);
                 if (result != null) {
-                    String date = TimeUtil.getLocalDateTimeOf(result.timestamp()).format(this.formatter);
-                    this.writer.append("[").append(date).append("] ").append(result.log());
-                    this.writer.newLine();
+                    this.append(result);
                     this.writer.flush();
                 }
             }
@@ -94,5 +106,11 @@ public class CurrencyLogger {
         catch (Exception exception) {
             exception.printStackTrace();
         }
+    }
+
+    private void append(@NotNull LogEntry entry) throws IOException {
+        String date = TimeUtil.getLocalDateTimeOf(entry.timestamp()).format(this.formatter);
+        this.writer.append("[").append(date).append("] ").append(entry.log());
+        this.writer.newLine();
     }
 }
