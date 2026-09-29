@@ -499,7 +499,7 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
 
         OperationExecutor executor = context.getExecutor();
 
-        user.addBalance(currency, amount);
+        if (!user.tryEditBalance(currency, balance -> balance.add(currency, amount))) return OperationResult.FAILURE;
         user.markDirty();
 
         if (this.logger != null && context.shouldNotifyLogger()) {
@@ -544,7 +544,7 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
             Player target = user.player().orElse(null);
             if (target == null) return; // Only online players should be affected.
 
-            user.addBalance(currency, amount);
+            if (!user.tryEditBalance(currency, balance -> balance.add(currency, amount))) return;
             user.markDirty();
 
             if (context.shouldNotify(NotificationTarget.USER)) {
@@ -585,7 +585,7 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
 
         OperationExecutor executor = context.getExecutor();
 
-        user.removeBalance(currency, amount);
+        if (!user.tryEditBalance(currency, balance -> balance.remove(currency, amount))) return OperationResult.FAILURE;
         user.markDirty();
 
         if (this.logger != null && context.shouldNotifyLogger()) {
@@ -629,7 +629,7 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
 
         OperationExecutor executor = context.getExecutor();
 
-        user.setBalance(currency, amount);
+        if (!user.tryEditBalance(currency, balance -> balance.set(currency, amount))) return OperationResult.FAILURE;
         user.markDirty();
 
         if (this.logger != null && context.shouldNotifyLogger()) {
@@ -674,7 +674,9 @@ public class CurrencyManager extends AbstractManager<EconomyPlugin> {
 
         OperationExecutor executor = context.getExecutor();
 
-        user.resetBalance(currency);
+        if (!user.tryEditBalance(currency, balance -> balance.set(currency, currency.getStartValue()))) {
+            return OperationResult.FAILURE;
+        }
         user.markDirty();
 
         if (this.logger != null && context.shouldNotifyLogger()) {

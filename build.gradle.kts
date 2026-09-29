@@ -36,6 +36,9 @@ dependencies {
 
     testImplementation("io.papermc.paper:paper-api:26.1.2.build.74-stable")
     testImplementation("maven.modrinth:nightcore:2.16.6")
+    testImplementation("com.github.MilkBowl:VaultAPI:1.7") {
+        exclude(group = "org.bukkit", module = "bukkit")
+    }
     testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
     testImplementation("org.mockito:mockito-core:5.20.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

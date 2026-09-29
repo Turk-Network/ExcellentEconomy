@@ -1,6 +1,7 @@
 package su.nightexpress.excellenteconomy.user;
 
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginManager;
@@ -10,15 +11,21 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import su.nightexpress.excellenteconomy.EconomyPlugin;
+import su.nightexpress.excellenteconomy.api.ExcellentEconomyAPI;
 import su.nightexpress.excellenteconomy.api.currency.ExcellentCurrency;
+import su.nightexpress.excellenteconomy.api.currency.operation.OperationContext;
+import su.nightexpress.excellenteconomy.api.currency.operation.OperationResult;
 import su.nightexpress.excellenteconomy.api.event.ChangeBalanceEvent;
 import su.nightexpress.excellenteconomy.command.CommandManager;
 import su.nightexpress.excellenteconomy.currency.CurrencyManager;
 import su.nightexpress.excellenteconomy.currency.CurrencyRegistry;
+import su.nightexpress.excellenteconomy.currency.impl.EconomyCurrency;
 import su.nightexpress.excellenteconomy.data.DataHandler;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -271,5 +278,99 @@ class BalanceConcurrencyTest {
         assertTrue(manager(player, source).exchange(player, currency, target, 25));
         assertEquals(75D, source.getBalance(currency));
         assertEquals(51D, source.getBalance(target));
+    }
+
+    @Test
+    void cancelledAdminOperationsReportFailure() {
+        CoinsUser user = user(100);
+        doAnswer(call -> {
+            ChangeBalanceEvent event = call.getArgument(0);
+            event.setCancelled(true);
+            return null;
+        }).when(events).callEvent(any(ChangeBalanceEvent.class));
+        when(currency.getStartValue()).thenReturn(10D);
+        CurrencyManager manager = manager(mock(Player.class), user);
+        OperationContext context = OperationContext.custom("Test");
+
+        assertEquals(OperationResult.FAILURE, manager.give(context, user, currency, 25));
+        assertEquals(OperationResult.FAILURE, manager.remove(context, user, currency, 25));
+        assertEquals(OperationResult.FAILURE, manager.set(context, user, currency, 25));
+        assertEquals(OperationResult.FAILURE, manager.reset(context, user, currency));
+        assertEquals(100D, user.getBalance(currency));
+        assertFalse(user.isDirty());
+    }
+
+    @Test
+    void acceptedAdminOperationsReportSuccess() {
+        CoinsUser user = user(100);
+        when(currency.getStartValue()).thenReturn(10D);
+        CurrencyManager manager = manager(mock(Player.class), user);
+        OperationContext context = OperationContext.custom("Test");
+
+        assertEquals(OperationResult.SUCCESS, manager.give(context, user, currency, 25));
+        assertEquals(125D, user.getBalance(currency));
+        assertEquals(OperationResult.SUCCESS, manager.remove(context, user, currency, 5));
+        assertEquals(120D, user.getBalance(currency));
+        assertEquals(OperationResult.SUCCESS, manager.set(context, user, currency, 50));
+        assertEquals(50D, user.getBalance(currency));
+        assertEquals(OperationResult.SUCCESS, manager.reset(context, user, currency));
+        assertEquals(10D, user.getBalance(currency));
+        assertTrue(user.isDirty());
+    }
+
+    @Test
+    void parallelVaultWithdrawalsCannotSpendTheSameBalanceTwice() throws Exception {
+        CoinsUser user = user(100);
+        OfflinePlayer player = mock(OfflinePlayer.class);
+        when(player.getUniqueId()).thenReturn(user.getId());
+        doAnswer(call -> {
+            Thread.yield(); // Widen the window between the balance check and the debit.
+            return null;
+        }).when(events).callEvent(any(ChangeBalanceEvent.class));
+        EconomyCurrency economy = vaultEconomy(user);
+
+        int successful = 0;
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            var tasks = new ArrayList<Callable<Boolean>>();
+            for (int i = 0; i < 200; i++) tasks.add(() -> economy.withdrawPlayer(player, 1).transactionSuccess());
+            for (var result : executor.invokeAll(tasks)) if (result.get()) successful++;
+        }
+        assertEquals(100, successful);
+        assertEquals(0D, user.getBalance(economy));
+    }
+
+    @Test
+    void cancelledVaultChangesReportFailure() throws Exception {
+        CoinsUser user = user(100);
+        OfflinePlayer player = mock(OfflinePlayer.class);
+        when(player.getUniqueId()).thenReturn(user.getId());
+        doAnswer(call -> {
+            ChangeBalanceEvent event = call.getArgument(0);
+            event.setCancelled(true);
+            return null;
+        }).when(events).callEvent(any(ChangeBalanceEvent.class));
+        EconomyCurrency economy = vaultEconomy(user);
+
+        assertFalse(economy.withdrawPlayer(player, 25).transactionSuccess());
+        assertFalse(economy.depositPlayer(player, 25).transactionSuccess());
+        assertEquals(100D, user.getBalance(economy));
+    }
+
+    private EconomyCurrency vaultEconomy(CoinsUser user) throws Exception {
+        UserManager users = mock(UserManager.class);
+        when(users.getOrFetch(user.getId())).thenReturn(Optional.of(user));
+        CurrencyManager manager = new CurrencyManager(mock(EconomyPlugin.class), new CurrencyRegistry(),
+            mock(CommandManager.class), mock(DataHandler.class), users);
+        ExcellentEconomyAPI api = mock(ExcellentEconomyAPI.class);
+        when(api.userManager()).thenReturn(users);
+        when(api.currencyManager()).thenReturn(manager);
+
+        // The real constructor loads a config file and item icon, so run the real Vault methods on a bare instance.
+        EconomyCurrency economy = mock(EconomyCurrency.class, CALLS_REAL_METHODS);
+        doReturn("coins").when(economy).getId();
+        Field field = EconomyCurrency.class.getDeclaredField("api");
+        field.setAccessible(true);
+        field.set(economy, api);
+        return economy;
     }
 }
